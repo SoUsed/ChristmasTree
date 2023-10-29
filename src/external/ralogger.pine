@@ -1,0 +1,200 @@
+// Copyright © 2023 pro1007ka <pro1007ka@gmail.com>
+// This work is free. It comes without any warranty, to the extent permitted
+// by applicable law. You can redistribute it and/or modify it under the
+// terms of the Do What The Fuck You Want To Public License, Version 2,
+// as published by Sam Hocevar. See http://www.wtfpl.net/ for more details.
+
+//@version=5
+
+// @description Ralogger: library implementing a wrapper for the native Pine Logs, introducing log levels and a bit of configuration
+library("ralogger")
+
+int LOG_LEVEL_TRACE = 6
+int LOG_LEVEL_DEBUG = 5
+int LOG_LEVEL_INFO  = 4
+int LOG_LEVEL_WARN  = 3
+int LOG_LEVEL_ERROR = 2
+int LOG_LEVEL_FATAL = 1
+int LOG_LEVEL_OFF   = 0
+
+int DEST_LOGGER_INF = 2
+int DEST_LOGGER_WRN = 1
+int DEST_LOGGER_ERR = 0
+
+//@function Returns a "log level trace" id constant, which can be passed to logger configuration
+export log_level_trace() => LOG_LEVEL_TRACE
+
+//@function Returns a "log level debug" id constant, which can be passed to logger configuration
+export log_level_debug() => LOG_LEVEL_DEBUG
+
+//@function Returns a "log level info" id constant, which can be passed to logger configuration
+export log_level_info() => LOG_LEVEL_INFO
+
+//@function Returns a "log level warning" id constant, which can be passed to logger configuration
+export log_level_warning() => LOG_LEVEL_WARN
+
+//@function Returns a "log level error" id constant, which can be passed to logger configuration
+export log_level_error() => LOG_LEVEL_ERROR
+
+//@function Returns a "log level fatal" id constant, which can be passed to logger configuration
+export log_level_fatal() => LOG_LEVEL_FATAL
+
+//@function Returns a "log level off" id constant, which can be passed to logger configuration
+export log_level_off() => LOG_LEVEL_OFF
+
+//@type Logger Configuration
+//@field log_level - Logger level. Messages of higher log levels than logger's will be ignored (TRACE > DEBUG > INFO > ERROR > FATAL > OFF)
+//@field enable_bar_index - Defines whether to add "[BarIdx] |{bar_index}|" entry to logs
+//@field enable_bar_ts - Defines whether to add "[BarTS] |{time}|" entry to logs
+//@field enable_ohlc - Defines whether to add "[OHLC] |{open} {high} {low} {close}|" entry to logs
+//@field enable_volume - Defines whether to add "[Vol] |{volume}|" entry to logs
+//@field newline_delimiter - Defines whether to add newline before the main entry message
+export type LoggerConfig
+	int log_level = 5
+	bool enable_bar_index = false
+	bool enable_bar_ts = false
+	bool enable_ohlc = false
+	bool enable_volume = false
+	bool enable_newline = false
+
+//@type Logger - Native Pine Logger Wrapper
+//@field conf_ - Config (required). Use LoggerConfig.new() if you are alright with everything
+export type Logger
+	LoggerConfig conf_
+
+//@function Sets logger log level to desired level
+export method set_log_level(Logger logger, int level) =>
+	logger.conf_.log_level := level
+
+//@function Add "[BarIdx] |{bar_index}|" entry to furure logs
+export method enable_bar_index(Logger logger) =>
+	logger.conf_.enable_bar_index := true
+
+//@function Do not add "[BarIdx] |{bar_index}|" entry to future logs
+export method disable_bar_index(Logger logger) =>
+	logger.conf_.enable_bar_index := false
+
+//@function Add "[BarTS] |{time}|" entry to furure logs
+export method enable_bar_ts(Logger logger) =>
+	logger.conf_.enable_bar_ts := true
+
+//@function Do not add "[BarTS] |{time}|" entry to future logs
+export method disable_bar_ts(Logger logger) =>
+	logger.conf_.enable_bar_ts := false
+
+//@function Add "[OHLC] |{open} {high} {low} {close}|" entry to future logs
+export method enable_ohlc(Logger logger) =>
+	logger.conf_.enable_ohlc := true
+
+//@function Do not add "[OHLC] |{open} {high} {low} {close}|" entry to future logs
+export method disable_ohlc(Logger logger) =>
+	logger.conf_.enable_ohlc := false
+
+//@function Add "[Vol] |{volume}|" entry to future logs
+export method enable_volume(Logger logger) =>
+	logger.conf_.enable_volume := true
+
+//@function Do not add "[Vol] |{volume}|" entry to future logs
+export method disable_volume(Logger logger) =>
+	logger.conf_.enable_volume := false
+
+//@function Add newline before main message to future logs
+export method enable_newline(Logger logger) =>
+	logger.conf_.enable_newline := true
+
+//@function Do not add newline before main message to future logs
+export method disable_newline(Logger logger) =>
+	logger.conf_.enable_newline := false
+
+//@function Apply config to logger
+export method apply_config(Logger logger, LoggerConfig config) =>
+	logger.conf_ := config
+
+__opt_log_info(LoggerConfig conf) =>
+	bi = (conf.enable_bar_index ? ("[BarIdx] |" + str.tostring(bar_index) + "| ") : "")
+	ts = (conf.enable_bar_ts ? ("[BarTS] |" + str.tostring(time) + "| ") : "")
+	ohlc = (conf.enable_ohlc ? ("[OHLC] |" + str.tostring(open) + " " + str.tostring(high) + " " + str.tostring(low) + " " + str.tostring(close) + "| ") : "")
+	vol = (conf.enable_volume ? ("[Vol] |" + str.tostring(volume) + "| ") : "")
+	bi + ts + ohlc + vol + (conf.enable_newline ? "\n" : "")
+
+//@function Core logic of Ralogger wrapper
+__log_impl(string prefix, int dest_logger, LoggerConfig conf, int entry_lvl, string msg) =>
+	logger_lvl = conf.log_level
+	if logger_lvl >= entry_lvl
+		final_msg = "[" + prefix + "] " + __opt_log_info(conf) + msg
+		switch dest_logger
+			DEST_LOGGER_INF => log.info(final_msg)
+			DEST_LOGGER_WRN => log.warning(final_msg)
+			DEST_LOGGER_ERR => log.error(final_msg)
+
+//@function Add log entry with log level TRACE, send it to native info logger with [TRACE] prefix
+export method log_trace(Logger logger, string message) =>
+	__log_impl("TRACE", DEST_LOGGER_INF, logger.conf_, LOG_LEVEL_TRACE, message)
+
+//@function Add log entry with log level DEBUG, send it to native info logger with [DEBUG] prefix
+export method log_debug(Logger logger, string message) =>
+	__log_impl("DEBUG", DEST_LOGGER_INF, logger.conf_, LOG_LEVEL_DEBUG, message)
+
+//@function Add log entry with log level INFO, send it to native info logger with [INFO] prefix
+export method log_info(Logger logger, string message) =>
+	__log_impl("INFO", DEST_LOGGER_INF, logger.conf_, LOG_LEVEL_INFO, message)
+
+//@function Add log entry with log level WARN, send it to native warning logger with [WARN] prefix
+export method log_warning(Logger logger, string message) =>
+	__log_impl("WARN", DEST_LOGGER_WRN, logger.conf_, LOG_LEVEL_WARN, message)
+
+//@function Add log entry with log level ERROR, send it to native error logger with [ERROR] prefix
+export method log_error(Logger logger, string message) =>
+	__log_impl("ERROR", DEST_LOGGER_ERR, logger.conf_, LOG_LEVEL_ERROR, message)
+
+//@function Add log entry with log level FATAL, send it to native error logger with [FATAL] prefix
+export method log_fatal(Logger logger, string message) =>
+	__log_impl("FATAL", DEST_LOGGER_ERR, logger.conf_, LOG_LEVEL_FATAL, message)
+
+// ===============================================================================
+// ralogger showcase, open Pine Logs to see
+test() =>
+	conf_ = LoggerConfig.new(log_level_trace(), true, true)
+	logger = Logger.new(conf_)
+	logger.log_trace("I am a trace log and you can see me")
+	logger.log_debug("I am a debug log and you can see me")
+	logger.log_info("I am an info log and you can see me")
+	logger.log_warning("I am a warn log and you can see me")
+	logger.log_error("I am am error log and you can see me")
+	logger.log_fatal("I am a fatal log and you can see me")
+	logger.set_log_level(log_level_off())
+	logger.log_fatal("I am a fatal log and you CAN'T see me")
+	logger.log_info("I am an info log and you CAN'T see me")
+
+	conf_other = LoggerConfig.new(log_level_info(), false, false)
+	logger.apply_config(conf_other)
+	logger.log_trace("I am a trace log and you CAN'T see me")
+	logger.log_debug("I am a debug log and you CAN'T see me")
+	logger.log_info("I am an info log and you can see me")
+	logger.log_warning("I am a warn log and you can see me")
+	logger.log_error("I am am error log and you can see me")
+	logger.log_fatal("I am a fatal log and you can see me")
+
+	logger.enable_bar_index()
+	logger.log_info("Now you see a bar index")
+	logger.disable_bar_index()
+	logger.log_info("Now you don't see a bar index")
+	logger.enable_bar_ts()
+	logger.log_info("Now you see a bar timestamp")
+	logger.disable_bar_ts()
+	logger.log_info("Now you don't see a bar timestamp")
+	logger.enable_ohlc()
+	logger.log_info("Now you see ohlc")
+	logger.disable_ohlc()
+	logger.log_info("Now you don't see ohlc")
+	logger.enable_volume()
+	logger.log_info("Now you see volume")
+	logger.disable_volume()
+	logger.log_info("Now you don't see volume")
+	logger.enable_newline()
+	logger.log_info("Now you see newline before msg")
+	logger.disable_newline()
+	logger.log_info("Now you don't see newline before msg")
+
+if barstate.islast
+	test()
